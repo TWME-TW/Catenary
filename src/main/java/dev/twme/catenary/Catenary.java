@@ -4,6 +4,7 @@ import dev.twme.catenary.commands.CommandManager;
 import dev.twme.catenary.config.ConfigManager;
 import dev.twme.catenary.listeners.PlayerInteractionListener;
 import dev.twme.catenary.render.DisplayEntityManager;
+import dev.twme.catenary.storage.StructureManager;
 import dev.twme.catenary.studio.StudioManager;
 import dev.twme.catenary.model.PresetManager;
 import org.bukkit.NamespacedKey;
@@ -17,6 +18,7 @@ public final class Catenary extends JavaPlugin {
     private DisplayEntityManager displayEntityManager;
     private StudioManager studioManager;
     private CommandManager commandManager;
+    private StructureManager structureManager;
 
     @Override
     public void onEnable() {
@@ -43,6 +45,9 @@ public final class Catenary extends JavaPlugin {
         // 設定指令
         commandManager = new CommandManager(this);
         commandManager.registerCommands();
+
+        //  結構管理器
+        structureManager = new StructureManager(this);
         
         getLogger().info("Catenary 插件已啟用");
     }
@@ -87,5 +92,9 @@ public final class Catenary extends JavaPlugin {
     
     public CommandManager getCommandManager() {
         return commandManager;
+    }
+
+    public StructureManager getStructureManager() {
+        return structureManager;
     }
 }
