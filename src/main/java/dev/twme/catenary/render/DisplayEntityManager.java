@@ -4,6 +4,7 @@ import dev.twme.catenary.Catenary;
 import dev.twme.catenary.math.Vector3D;
 import dev.twme.catenary.model.CatenaryStructure;
 import dev.twme.catenary.model.RenderItem;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.BlockDisplay;
@@ -57,7 +58,8 @@ public class DisplayEntityManager {
         
         // 為每個渲染點建立顯示實體
         for (RenderPoint renderPoint : renderPoints) {
-            Display displayEntity = createDisplayEntity(
+            // 始終使用方塊展示實體
+            Display displayEntity = createBlockDisplayEntity(
                 world, 
                 renderPoint.position, 
                 renderItem,
@@ -214,59 +216,54 @@ public class DisplayEntityManager {
     private Quaternionf calculateRotation(Vector3D direction) {
         // 如果方向是垂直向上或向下的，特殊處理
         if (Math.abs(direction.getY()) > 0.99) {
-            return new Quaternionf().rotationXYZ(
-                (float)(direction.getY() > 0 ? Math.PI / 2 : -Math.PI / 2),
-                0f, 
-                0f
+            return new Quaternionf().rotationY(0f).rotateX(
+                (float)(direction.getY() > 0 ? Math.PI / 2 : -Math.PI / 2)
             );
         }
         
-        // 計算Y軸旋轉角度（偏航）
+        // 計算水平面上的方向（偏航角）
         double yaw = Math.atan2(direction.getX(), direction.getZ());
         
-        // 計算X軸旋轉角度（俯仰）
-        double pitch = Math.asin(direction.getY());
+        // 計算垂直方向的仰角
+        double pitch = -Math.asin(direction.getY());
         
-        // 創建四元數
-        return new Quaternionf().rotationXYZ(
-            (float)pitch,
-            (float)yaw, 
-            0f
-        );
+        // 先繞Y軸旋轉（偏航），再繞X軸旋轉（俯仰），最後需要額外旋轉90度使方塊沿鏈條方向對齊
+        return new Quaternionf()
+            .rotateY((float)yaw)
+            .rotateX((float)pitch)
+            .rotateZ((float)(Math.PI / 2)); // 旋轉90度使方塊與鏈條方向對齊
     }
     
     /**
-     * 建立顯示實體
+     * 建立方塊展示實體
      */
-    private Display createDisplayEntity(World world, Vector3D position, RenderItem renderItem, UUID structureId, Quaternionf rotation) {
-        Display display;
+    private Display createBlockDisplayEntity(World world, Vector3D position, RenderItem renderItem, UUID structureId, Quaternionf rotation) {
         Location location = position.toLocation(world);
         
+        // 建立方塊顯示實體
+        BlockDisplay display = (BlockDisplay) world.spawnEntity(location, EntityType.BLOCK_DISPLAY);
+        
+        // 設置方塊資料
         if (renderItem.isBlock()) {
-            // 建立方塊顯示
-            BlockDisplay blockDisplay = (BlockDisplay) world.spawnEntity(location, EntityType.BLOCK_DISPLAY);
-            blockDisplay.setBlock(renderItem.getItem().getType().createBlockData());
-            display = blockDisplay;
+            display.setBlock(renderItem.getItem().getType().createBlockData());
         } else {
-            // 建立物品顯示
-            ItemDisplay itemDisplay = (ItemDisplay) world.spawnEntity(location, EntityType.ITEM_DISPLAY);
-            itemDisplay.setItemStack(renderItem.getItem());
-            display = itemDisplay;
+            // 如果不是方塊物品，則使用石頭作為預設方塊
+            display.setBlock(Bukkit.createBlockData("minecraft:chain"));
         }
         
         // 基本變換
-        Transformation baseTransform = renderItem.getTransformation();
+        float scale = renderItem.getScale() * 0.8f; // 稍微縮小一點以便更好看
         
-        // 結合自定義旋轉和基本變換
-        Transformation combinedTransform = new Transformation(
-            baseTransform.getTranslation(),
-            rotation,                               // 使用曲線方向的旋轉
-            baseTransform.getScale(),
-            baseTransform.getLeftRotation()
+        // 建立變換矩陣
+        Transformation transformation = new Transformation(
+            new org.joml.Vector3f(0, 0, 0),      // 平移
+            rotation,                            // 四元數旋轉
+            new org.joml.Vector3f(scale, scale, scale),  // 縮放
+            new org.joml.Quaternionf()           // 右乘旋轉（一般不需要）
         );
         
         // 設定轉換資訊
-        display.setTransformation(combinedTransform);
+        display.setTransformation(transformation);
         
         // 設定顯示設定
         display.setBrightness(new Display.Brightness(15, 15)); // 最大亮度
