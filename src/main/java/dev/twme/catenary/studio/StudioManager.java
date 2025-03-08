@@ -295,7 +295,7 @@ public class StudioManager {
      */
     private void showParticleEffect(Location location) {
         location.getWorld().spawnParticle(
-            Particle.VILLAGER_HAPPY, 
+            Particle.HAPPY_VILLAGER,
             location.getX(), location.getY() + 1, location.getZ(), 
             20, 0.5, 0.5, 0.5, 0.1
         );
