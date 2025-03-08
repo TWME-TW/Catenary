@@ -17,10 +17,11 @@ public class PresetManager {
     
     private final Catenary plugin;
     private final Map<String, Preset> presets = new HashMap<>();
-    private File presetsFile;
+    private File presetFile;
     
     public PresetManager(Catenary plugin) {
         this.plugin = plugin;
+        this.presetFile = new File(plugin.getDataFolder(), "presets.yml");
     }
     
     /**
@@ -29,110 +30,114 @@ public class PresetManager {
     public void loadPresets() {
         presets.clear();
         
-        // 載入內建預設
-        loadBuiltinPresets();
-        
-        // 載入自訂預設
-        loadCustomPresets();
-        
-        plugin.getLogger().info("已載入 " + presets.size() + " 個懸掛結構預設");
-    }
-    
-    /**
-     * 載入內建預設
-     */
-    private void loadBuiltinPresets() {
-        // 創建預設配置檔案
-        presetsFile = new File(plugin.getDataFolder(), "presets.yml");
-        if (!presetsFile.exists()) {
+        // 建立預設文件（如果不存在）
+        if (!presetFile.exists()) {
             plugin.saveResource("presets.yml", false);
         }
         
-        // 讀取預設配置
-        FileConfiguration config = YamlConfiguration.loadConfiguration(presetsFile);
+        FileConfiguration config = YamlConfiguration.loadConfiguration(presetFile);
         ConfigurationSection presetsSection = config.getConfigurationSection("presets");
         
-        if (presetsSection != null) {
-            for (String key : presetsSection.getKeys(false)) {
-                ConfigurationSection presetSection = presetsSection.getConfigurationSection(key);
-                if (presetSection == null) continue;
-                
+        if (presetsSection == null) {
+            plugin.getLogger().warning("No presets found in presets.yml");
+            createDefaultPresets();
+            return;
+        }
+        
+        // 載入所有預設
+        for (String presetId : presetsSection.getKeys(false)) {
+            ConfigurationSection section = presetsSection.getConfigurationSection(presetId);
+            if (section != null) {
                 try {
-                    Preset preset = Preset.fromConfig(key, presetSection);
-                    presets.put(key, preset);
+                    Preset preset = Preset.fromConfig(presetId, section);
+                    presets.put(presetId, preset);
                 } catch (Exception e) {
-                    plugin.getLogger().warning("載入預設 '" + key + "' 時發生錯誤: " + e.getMessage());
+                    plugin.getLogger().warning("Failed to load preset '" + presetId + "': " + e.getMessage());
                 }
             }
         }
-    }
-    
-    /**
-     * 載入自訂預設
-     */
-    private void loadCustomPresets() {
-        // 創建自訂預設目錄
-        File customPresetsDir = new File(plugin.getDataFolder(), "custom_presets");
-        if (!customPresetsDir.exists()) {
-            customPresetsDir.mkdirs();
-        }
         
-        // 載入所有自訂預設檔案
-        File[] files = customPresetsDir.listFiles((dir, name) -> name.endsWith(".yml"));
-        if (files == null) return;
+        plugin.getLogger().info("Loaded " + presets.size() + " presets");
         
-        for (File file : files) {
-            try {
-                FileConfiguration config = YamlConfiguration.loadConfiguration(file);
-                String presetId = file.getName().replace(".yml", "");
-                
-                // 避免與內建預設衝突
-                if (presets.containsKey(presetId)) {
-                    presetId = "custom_" + presetId;
-                }
-                
-                Preset preset = Preset.fromConfig(presetId, config);
-                presets.put(presetId, preset);
-            } catch (Exception e) {
-                plugin.getLogger().warning("載入自訂預設 '" + file.getName() + "' 時發生錯誤: " + e.getMessage());
-            }
+        // 如果沒有載入任何預設，建立一些默認值
+        if (presets.isEmpty()) {
+            createDefaultPresets();
         }
     }
     
     /**
-     * 添加新的預設
+     * 建立預設值
      */
-    public void addPreset(Preset preset) {
-        presets.put(preset.getId(), preset);
+    private void createDefaultPresets() {
+        plugin.getLogger().info("Creating default presets...");
+        
+        // 建立預設
+        addDefaultPreset("chain", "鏈條", "標準懸掛鏈條", Material.CHAIN, false, 0.3, 10, 0.5, Material.CHAIN, false);
+        addDefaultPreset("lantern", "燈籠", "懸掛式燈籠", Material.LANTERN, false, 0.2, 8, 2.0, Material.LANTERN, false);
+        addDefaultPreset("powerline", "電線", "高壓電線", Material.BLACK_WOOL, true, 0.15, 15, 1.0, Material.LIGHTNING_ROD, false);
+        
+        // 保存預設
+        savePresets();
     }
     
     /**
-     * 保存預設為自訂預設
+     * 添加默認預設
      */
-    public void saveCustomPreset(Preset preset) throws IOException {
-        File customPresetsDir = new File(plugin.getDataFolder(), "custom_presets");
-        if (!customPresetsDir.exists()) {
-            customPresetsDir.mkdirs();
-        }
-        
-        File presetFile = new File(customPresetsDir, preset.getId() + ".yml");
+    private void addDefaultPreset(String id, String name, String description, Material material, boolean isBlock, 
+                                 double slack, int segments, double spacing, Material icon, boolean requirePermission) {
+        RenderItem renderItem = new RenderItem(material, isBlock, 1.0f, 0, 0, 0);
+        Preset preset = new Preset(id, name, description, renderItem, slack, segments, spacing, 
+                                  new org.bukkit.inventory.ItemStack(icon), requirePermission);
+        presets.put(id, preset);
+    }
+    
+    /**
+     * 保存所有預設
+     */
+    public void savePresets() {
         FileConfiguration config = new YamlConfiguration();
+        ConfigurationSection presetsSection = config.createSection("presets");
         
-        config.set("name", preset.getName());
-        config.set("description", preset.getDescription());
-        config.set("material", preset.getRenderItem().getItem().getType().name());
-        config.set("isBlock", preset.getRenderItem().isBlock());
-        config.set("scale", preset.getRenderItem().getScale());
-        config.set("rotation.x", preset.getRenderItem().getRotationX());
-        config.set("rotation.y", preset.getRenderItem().getRotationY());
-        config.set("rotation.z", preset.getRenderItem().getRotationZ());
-        config.set("slack", preset.getDefaultSlack());
-        config.set("segments", preset.getDefaultSegments());
-        config.set("spacing", preset.getDefaultSpacing());
-        config.set("icon", preset.getDisplayIcon().getType().name());
-        config.set("requirePermission", preset.isRequirePermission());
+        for (Map.Entry<String, Preset> entry : presets.entrySet()) {
+            String id = entry.getKey();
+            Preset preset = entry.getValue();
+            
+            ConfigurationSection section = presetsSection.createSection(id);
+            section.set("name", preset.getName());
+            section.set("description", preset.getDescription());
+            
+            // 渲染項目設定
+            section.set("material", preset.getRenderItem().getItem().getType().name());
+            section.set("isBlock", preset.getRenderItem().isBlock());
+            section.set("scale", preset.getRenderItem().getScale());
+            
+            // 旋轉設定
+            ConfigurationSection rotationSection = section.createSection("rotation");
+            rotationSection.set("x", preset.getRenderItem().getRotationX());
+            rotationSection.set("y", preset.getRenderItem().getRotationY());
+            rotationSection.set("z", preset.getRenderItem().getRotationZ());
+            
+            // 其他參數
+            section.set("slack", preset.getDefaultSlack());
+            section.set("segments", preset.getDefaultSegments());
+            section.set("spacing", preset.getDefaultSpacing());
+            section.set("icon", preset.getDisplayIcon().getType().name());
+            section.set("requirePermission", preset.isRequirePermission());
+        }
         
-        config.save(presetFile);
+        try {
+            config.save(presetFile);
+            plugin.getLogger().info("Saved " + presets.size() + " presets");
+        } catch (IOException e) {
+            plugin.getLogger().severe("Could not save presets: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 取得預設
+     */
+    public Preset getPreset(String id) {
+        return presets.get(id);
     }
     
     /**
@@ -143,33 +148,21 @@ public class PresetManager {
     }
     
     /**
-     * 取得特定預設
+     * 添加新預設
      */
-    public Preset getPreset(String id) {
-        return presets.get(id);
-    }
-    
-    /**
-     * 取得隨機預設
-     */
-    public Preset getRandomPreset() {
-        if (presets.isEmpty()) return null;
-        
-        List<Preset> allPresets = new ArrayList<>(presets.values());
-        int randomIndex = new Random().nextInt(allPresets.size());
-        return allPresets.get(randomIndex);
+    public void addPreset(Preset preset) {
+        presets.put(preset.getId(), preset);
+        savePresets();
     }
     
     /**
      * 移除預設
      */
-    public void removePreset(String id) {
-        presets.remove(id);
-        
-        // 若是自訂預設，也需刪除檔案
-        File customPresetFile = new File(plugin.getDataFolder(), "custom_presets/" + id + ".yml");
-        if (customPresetFile.exists()) {
-            customPresetFile.delete();
+    public boolean removePreset(String id) {
+        if (presets.remove(id) != null) {
+            savePresets();
+            return true;
         }
+        return false;
     }
 }

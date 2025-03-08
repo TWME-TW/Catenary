@@ -1,23 +1,19 @@
-# Catenary 插件配置檔
+# Catenary 插件配置檔案
 
-# 是否啟用除錯模式
-debug: false
-
-# 權限系統配置
-enablePermissions: true
-
-# 結構限制
-limits:
-  # 每玩家最大結構數量
+general:
+  # 是否啟用除錯模式
+  debugMode: false
+  
+  # 每個玩家可建立的最大結構數量
   maxStructuresPerPlayer: 50
   
-  # 最大渲染距離 (方塊)
-  maxRenderDistance: 64.0
+rendering:
+  # 結構的可見距離 (方塊)
+  viewDistance: 64
+  
+  # 更新間隔 (刻)
+  updateInterval: 20
 
-# 工具物品配置
-tools:
-  # 可用作編輯工具的物品
-  editingTools:
-    - STICK
-    - BLAZE_ROD
-    - CHAIN
+permissions:
+  # 是否檢查權限
+  checkPermissions: true

@@ -8,8 +8,10 @@ import dev.twme.catenary.model.Preset;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Particle;
+import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.*;
 
@@ -19,8 +21,8 @@ import java.util.*;
 public class StudioManager {
     
     private final Catenary plugin;
+    private final Map<UUID, SessionData> activeSessions = new HashMap<>();
     private final CatenaryCalculator calculator;
-    private final Map<UUID, SessionData> playerSessions = new HashMap<>();
     
     public StudioManager(Catenary plugin) {
         this.plugin = plugin;
@@ -28,304 +30,307 @@ public class StudioManager {
     }
     
     /**
-     * 開始新的編輯會話
+     * 開始建立會話
      */
-    public void startNewSession(Player player, Location firstPoint) {
-        UUID playerId = player.getUniqueId();
+    public void startCreateSession(Player player, Preset preset) {
         SessionData session = new SessionData();
-        session.firstPoint = firstPoint;
-        playerSessions.put(playerId, session);
+        session.player = player;
+        session.preset = preset;
+        session.state = SessionState.WAITING_FOR_FIRST_POINT;
+        activeSessions.put(player.getUniqueId(), session);
         
-        // 顯示第一個點的標記
-        showPointMarker(player, firstPoint, "第一點");
-        
-        player.sendMessage("§a第一點已設定，請設定第二點。");
+        // 給玩家提供工具
+        giveToolItem(player);
     }
     
     /**
-     * 設定會話的第二點
+     * 給予玩家編輯工具
      */
-    public void setSecondPoint(Player player, Location secondPoint) {
-        UUID playerId = player.getUniqueId();
-        SessionData session = playerSessions.get(playerId);
-        
-        if (session == null || session.firstPoint == null) {
-            player.sendMessage("§c請先設定第一點。");
-            return;
-        }
-        
-        if (!session.firstPoint.getWorld().equals(secondPoint.getWorld())) {
-            player.sendMessage("§c兩個點必須在同一個世界。");
-            return;
-        }
-        
-        double distance = session.firstPoint.distance(secondPoint);
-        if (distance < 1.0) {
-            player.sendMessage("§c兩點距離太近，請選擇更遠的位置。");
-            return;
-        }
-        
-        session.secondPoint = secondPoint;
-        
-        // 顯示第二個點的標記
-        showPointMarker(player, secondPoint, "第二點");
-        
-        // 準備預覽
-        preparePreview(player, session);
-        
-        player.sendMessage("§a第二點已設定，請選擇預設樣式或調整參數。");
-        
-        // 顯示預設選擇界面 (這裡將在未來實現)
-        // openPresetSelectionGui(player);
+    private void giveToolItem(Player player) {
+        ItemStack toolItem = new ItemStack(Material.STICK);
+        // 可以在這裡設置工具的顯示名稱和說明
+        player.getInventory().addItem(toolItem);
+        player.sendMessage("§a已給予你編輯工具，使用右鍵點擊方塊設定點位。");
     }
     
     /**
-     * 準備結構預覽
+     * 處理玩家選擇第一個點
      */
-    private void preparePreview(Player player, SessionData session) {
-        // 使用預設參數建立預覽結構
-        Preset defaultPreset = plugin.getPresetManager().getPreset("chain"); // 預設使用鏈條
-        if (defaultPreset == null) {
-            defaultPreset = plugin.getPresetManager().getRandomPreset();
-        }
-        
-        if (defaultPreset == null) {
-            player.sendMessage("§c找不到可用的預設樣式。");
+    public void handleFirstPointSelection(Player player, Location location) {
+        SessionData session = activeSessions.get(player.getUniqueId());
+        if (session == null || session.state != SessionState.WAITING_FOR_FIRST_POINT) {
             return;
         }
         
-        // 建立臨時預覽結構
-        CatenaryStructure previewStructure = new CatenaryStructure(
-            player.getUniqueId(),
+        session.firstPoint = new Vector3D(location);
+        session.world = location.getWorld();
+        session.state = SessionState.WAITING_FOR_SECOND_POINT;
+        
+        player.sendMessage("§a已設定第一個點，請選擇第二個點。");
+        
+        // 顯示粒子效果
+        showParticleEffect(location);
+    }
+    
+    /**
+     * 處理玩家選擇第二個點
+     */
+    public void handleSecondPointSelection(Player player, Location location) {
+        SessionData session = activeSessions.get(player.getUniqueId());
+        if (session == null || session.state != SessionState.WAITING_FOR_SECOND_POINT) {
+            return;
+        }
+        
+        // 確保在同一世界
+        if (!location.getWorld().equals(session.world)) {
+            player.sendMessage("§c兩點必須在同一個世界中！");
+            return;
+        }
+        
+        session.secondPoint = new Vector3D(location);
+        session.state = SessionState.READY_TO_CREATE;
+        
+        player.sendMessage("§a已設定第二個點。");
+        showParticleEffect(location);
+        
+        // 啟動預覽
+        startPreview(player);
+    }
+    
+    /**
+     * 開始預覽懸掛結構
+     */
+    private void startPreview(Player player) {
+        SessionData session = activeSessions.get(player.getUniqueId());
+        
+        // 設定預設的參數值
+        session.slack = session.preset.getDefaultSlack();
+        session.segments = session.preset.getDefaultSegments();
+        session.spacing = session.preset.getDefaultSpacing();
+        
+        // 計算預覽點位
+        List<Vector3D> previewPoints = calculator.calculatePoints(
             session.firstPoint,
             session.secondPoint,
-            defaultPreset.getRenderItem(),
-            defaultPreset.getDefaultSlack(),
-            defaultPreset.getDefaultSegments()
-        );
-        
-        // 計算懸掛曲線點位
-        List<Vector3D> points = calculator.calculatePoints(
-            new Vector3D(session.firstPoint),
-            new Vector3D(session.secondPoint),
-            defaultPreset.getDefaultSlack(),
-            defaultPreset.getDefaultSegments()
-        );
-        
-        previewStructure.setPoints(points);
-        session.previewStructure = previewStructure;
-        
-        // 渲染預覽結構
-        plugin.getDisplayEntityManager().renderStructure(previewStructure);
-        
-        // 設定預覽的參數
-        session.currentPreset = defaultPreset;
-        session.slack = defaultPreset.getDefaultSlack();
-        session.segments = defaultPreset.getDefaultSegments();
-        session.spacing = defaultPreset.getDefaultSpacing();
-    }
-    
-    /**
-     * 更新預覽結構
-     */
-    public void updatePreview(Player player) {
-        UUID playerId = player.getUniqueId();
-        SessionData session = playerSessions.get(playerId);
-        
-        if (session == null || session.previewStructure == null) {
-            return;
-        }
-        
-        // 更新結構屬性
-        session.previewStructure.setSlack(session.slack);
-        session.previewStructure.setSegments(session.segments);
-        session.previewStructure.setSpacing(session.spacing);
-        session.previewStructure.setRenderItem(session.currentPreset.getRenderItem());
-        
-        // 重新計算點位
-        List<Vector3D> points = calculator.calculatePoints(
-            new Vector3D(session.firstPoint),
-            new Vector3D(session.secondPoint),
             session.slack,
             session.segments
         );
         
-        session.previewStructure.setPoints(points);
+        session.previewPoints = previewPoints;
         
-        // 重新渲染結構
-        plugin.getDisplayEntityManager().renderStructure(session.previewStructure);
+        // 顯示預覽粒子
+        new BukkitRunnable() {
+            int counter = 0;
+            
+            @Override
+            public void run() {
+                // 檢查會話是否仍然活動
+                if (!activeSessions.containsKey(player.getUniqueId()) ||
+                    activeSessions.get(player.getUniqueId()).state != SessionState.READY_TO_CREATE) {
+                    cancel();
+                    return;
+                }
+                
+                // 顯示粒子效果
+                for (Vector3D point : activeSessions.get(player.getUniqueId()).previewPoints) {
+                    player.spawnParticle(Particle.END_ROD, 
+                                         point.getX(), point.getY(), point.getZ(), 
+                                         1, 0, 0, 0, 0);
+                }
+                
+                counter++;
+                if (counter >= 100) { // 5秒後停止預覽（假設每秒運行20次）
+                    cancel();
+                }
+            }
+        }.runTaskTimer(plugin, 0L, 1L);
+        
+        // 提示玩家確認或調整
+        player.sendMessage("§a預覽已顯示。請輸入 §e/catenary confirm §a確認建立，或使用 §e/catenary adjust <參數> <值> §a調整參數。");
+        player.sendMessage("§a可調整的參數: §eslack§a (鬆緊度, 0-1), §esegments§a (分段數, 2-100), §espacing§a (間距, 0.1-10)");
     }
     
     /**
-     * 最終確認並創建結構
+     * 調整鬆緊度參數
      */
-    public void finalizeStructure(Player player, String name) {
-        UUID playerId = player.getUniqueId();
-        SessionData session = playerSessions.get(playerId);
-        
-        if (session == null || session.previewStructure == null) {
-            player.sendMessage("§c沒有有效的預覽結構。");
+    public void adjustSlack(Player player, double slack) {
+        SessionData session = activeSessions.get(player.getUniqueId());
+        if (session == null || session.state != SessionState.READY_TO_CREATE) {
+            player.sendMessage("§c沒有可調整的懸掛結構！");
             return;
         }
         
-        CatenaryStructure structure = session.previewStructure;
-        
-        // 設定結構名稱
-        if (name != null && !name.isEmpty()) {
-            structure.setName(name);
-        }
-        
-        // 保存結構
-        plugin.getStructureManager().addStructure(structure);
-        
-        player.sendMessage("§a懸掛結構「" + structure.getName() + "」已建立！");
-        
-        // 清除會話
-        playerSessions.remove(playerId);
-    }
-    
-    /**
-     * 取消編輯
-     */
-    public void cancelEditing(Player player) {
-        UUID playerId = player.getUniqueId();
-        SessionData session = playerSessions.get(playerId);
-        
-        if (session != null && session.previewStructure != null) {
-            plugin.getDisplayEntityManager().removeStructureEntities(session.previewStructure.getId());
-        }
-        
-        playerSessions.remove(playerId);
-        player.sendMessage("§a已取消編輯。");
-    }
-    
-    /**
-     * 顯示點位標記
-     */
-    private void showPointMarker(Player player, Location location, String label) {
-        // 使用粒子效果標記點位
-        player.spawnParticle(Particle.END_ROD, location, 30, 0.1, 0.1, 0.1, 0.05);
-        player.spawnParticle(Particle.GLOW, location, 5, 0.2, 0.2, 0.2, 0);
-        
-        // 顯示懸浮文字提示
-        player.sendTitle("", "§a已設定" + label, 5, 30, 10);
-    }
-    
-    /**
-     * 設定預設樣式
-     */
-    public void setPreset(Player player, String presetId) {
-        UUID playerId = player.getUniqueId();
-        SessionData session = playerSessions.get(playerId);
-        
-        if (session == null || session.previewStructure == null) {
-            player.sendMessage("§c沒有活動中的預覽結構。");
-            return;
-        }
-        
-        Preset preset = plugin.getPresetManager().getPreset(presetId);
-        if (preset == null) {
-            player.sendMessage("§c找不到預設樣式: " + presetId);
-            return;
-        }
-        
-        // 檢查權限
-        if (preset.isRequirePermission() && !player.hasPermission("catenary.preset." + preset.getId())) {
-            player.sendMessage("§c你沒有使用此預設樣式的權限。");
-            return;
-        }
-        
-        // 更新會話中的預設和參數
-        session.currentPreset = preset;
-        session.slack = preset.getDefaultSlack();
-        session.segments = preset.getDefaultSegments();
-        session.spacing = preset.getDefaultSpacing();
-        
-        // 更新預覽結構
-        session.previewStructure.setRenderItem(preset.getRenderItem());
-        updatePreview(player);
-        
-        player.sendMessage("§a已套用預設樣式：" + preset.getName());
-    }
-    
-    /**
-     * 調整鬆緊度
-     */
-    public void adjustSlack(Player player, double amount) {
-        UUID playerId = player.getUniqueId();
-        SessionData session = playerSessions.get(playerId);
-        
-        if (session == null || session.previewStructure == null) {
-            return;
-        }
-        
-        // 調整鬆緊度，確保在合理範圍內
-        session.slack = Math.max(0.01, Math.min(1.0, session.slack + amount));
-        updatePreview(player);
-        
-        player.sendMessage("§a鬆緊度：" + String.format("%.2f", session.slack));
+        // 更新預覽
+        session.slack = slack;
+        updatePreview(session);
+        player.sendMessage(String.format("§a已調整鬆緊度為: %.2f", slack));
     }
     
     /**
      * 調整分段數量
      */
-    public void adjustSegments(Player player, int amount) {
-        UUID playerId = player.getUniqueId();
-        SessionData session = playerSessions.get(playerId);
-        
-        if (session == null || session.previewStructure == null) {
+    public void adjustSegments(Player player, int segments) {
+        SessionData session = activeSessions.get(player.getUniqueId());
+        if (session == null || session.state != SessionState.READY_TO_CREATE) {
+            player.sendMessage("§c沒有可調整的懸掛結構！");
             return;
         }
         
-        // 調整分段數，確保在合理範圍內
-        session.segments = Math.max(2, Math.min(50, session.segments + amount));
-        updatePreview(player);
-        
-        player.sendMessage("§a分段數量：" + session.segments);
+        // 更新預覽
+        session.segments = segments;
+        updatePreview(session);
+        player.sendMessage(String.format("§a已調整分段數為: %d", segments));
     }
     
     /**
-     * 調整間距
+     * 調整間距參數
      */
-    public void adjustSpacing(Player player, double amount) {
-        UUID playerId = player.getUniqueId();
-        SessionData session = playerSessions.get(playerId);
-        
-        if (session == null || session.previewStructure == null) {
+    public void adjustSpacing(Player player, double spacing) {
+        SessionData session = activeSessions.get(player.getUniqueId());
+        if (session == null || session.state != SessionState.READY_TO_CREATE) {
+            player.sendMessage("§c沒有可調整的懸掛結構！");
             return;
         }
         
-        // 調整間距，確保在合理範圍內
-        session.spacing = Math.max(0.1, Math.min(2.0, session.spacing + amount));
-        updatePreview(player);
+        // 更新間距值
+        session.spacing = spacing;
+        player.sendMessage(String.format("§a已調整間距為: %.2f", spacing));
+    }
+    
+    /**
+     * 更新預覽
+     */
+    private void updatePreview(SessionData session) {
+        // 重新計算點位
+        session.previewPoints = calculator.calculatePoints(
+            session.firstPoint,
+            session.secondPoint,
+            session.slack,
+            session.segments
+        );
         
-        player.sendMessage("§a間距：" + String.format("%.2f", session.spacing));
+        // 顯示新的預覽
+        Player player = session.player;
+        showPreview(player, session.previewPoints);
+    }
+    
+    /**
+     * 顯示預覽
+     */
+    private void showPreview(Player player, List<Vector3D> points) {
+        // 清除現有的粒子效果是不可能的，但我們可以用新的粒子覆蓋
+        
+        // 顯示新的粒子
+        for (Vector3D point : points) {
+            player.spawnParticle(
+                Particle.END_ROD,
+                point.getX(), point.getY(), point.getZ(),
+                1, 0, 0, 0, 0
+            );
+        }
+    }
+    
+    /**
+     * 確認建立懸掛結構
+     */
+    public void confirmStructure(Player player) {
+        SessionData session = activeSessions.get(player.getUniqueId());
+        if (session == null || session.state != SessionState.READY_TO_CREATE) {
+            player.sendMessage("§c沒有可確認的懸掛結構！");
+            return;
+        }
+        
+        // 建立結構物件
+        CatenaryStructure structure = new CatenaryStructure(
+            UUID.randomUUID(),
+            player.getUniqueId(),
+            "懸掛結構_" + System.currentTimeMillis(),
+            session.world,
+            session.firstPoint,
+            session.secondPoint,
+            session.slack,
+            session.segments,
+            session.spacing,
+            session.preset.getRenderItem()
+        );
+        
+        // 計算並設定點位
+        structure.setPoints(calculator.calculatePoints(
+            session.firstPoint,
+            session.secondPoint,
+            structure.getSlack(),
+            structure.getSegments()
+        ));
+        
+        // 保存結構
+        plugin.getStructureManager().addStructure(structure);
+        
+        // 渲染結構
+        plugin.getDisplayEntityManager().renderStructure(structure);
+        
+        player.sendMessage("§a懸掛結構已成功建立！");
+        
+        // 結束會話
+        activeSessions.remove(player.getUniqueId());
+    }
+    
+    /**
+     * 取消編輯會話
+     */
+    public void cancelSession(Player player) {
+        if (activeSessions.remove(player.getUniqueId()) != null) {
+            player.sendMessage("§a已取消編輯會話。");
+        }
     }
     
     /**
      * 檢查玩家是否有活動會話
      */
     public boolean hasActiveSession(Player player) {
-        return playerSessions.containsKey(player.getUniqueId());
+        return activeSessions.containsKey(player.getUniqueId());
+    }
+    
+    /**
+     * 顯示粒子效果
+     */
+    private void showParticleEffect(Location location) {
+        location.getWorld().spawnParticle(
+            Particle.VILLAGER_HAPPY, 
+            location.getX(), location.getY() + 1, location.getZ(), 
+            20, 0.5, 0.5, 0.5, 0.1
+        );
     }
     
     /**
      * 取得玩家的會話資料
      */
-    public SessionData getPlayerSession(Player player) {
-        return playerSessions.get(player.getUniqueId());
+    public SessionData getSession(UUID playerId) {
+        return activeSessions.get(playerId);
+    }
+    
+    /**
+     * 會話狀態枚舉
+     */
+    public enum SessionState {
+        WAITING_FOR_FIRST_POINT,
+        WAITING_FOR_SECOND_POINT,
+        READY_TO_CREATE,
+        ADJUSTING_PARAMETERS
     }
     
     /**
      * 會話資料類別
      */
-    public static class SessionData {
-        public Location firstPoint;
-        public Location secondPoint;
-        public CatenaryStructure previewStructure;
-        public Preset currentPreset;
-        public double slack = 0.3;
-        public int segments = 10;
-        public double spacing = 0.5;
+    public class SessionData {
+        public Player player;
+        public Preset preset;
+        public SessionState state;
+        public Vector3D firstPoint;
+        public Vector3D secondPoint;
+        public World world;
+        public List<Vector3D> previewPoints;
+        public double slack;
+        public int segments;
+        public double spacing;
     }
 }

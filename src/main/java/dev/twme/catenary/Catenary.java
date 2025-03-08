@@ -3,10 +3,10 @@ package dev.twme.catenary;
 import dev.twme.catenary.commands.CommandManager;
 import dev.twme.catenary.config.ConfigManager;
 import dev.twme.catenary.listeners.PlayerInteractionListener;
+import dev.twme.catenary.model.PresetManager;
 import dev.twme.catenary.render.DisplayEntityManager;
 import dev.twme.catenary.storage.StructureManager;
 import dev.twme.catenary.studio.StudioManager;
-import dev.twme.catenary.model.PresetManager;
 import org.bukkit.NamespacedKey;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -36,6 +36,9 @@ public final class Catenary extends JavaPlugin {
         // 初始化顯示實體管理器
         displayEntityManager = new DisplayEntityManager(this);
         
+        // 初始化結構管理器
+        structureManager = new StructureManager(this);
+        
         // 初始化工作室管理器
         studioManager = new StudioManager(this);
         
@@ -45,22 +48,30 @@ public final class Catenary extends JavaPlugin {
         // 設定指令
         commandManager = new CommandManager(this);
         commandManager.registerCommands();
-
-        //  結構管理器
-        structureManager = new StructureManager(this);
         
-        getLogger().info("Catenary 插件已啟用");
+        getLogger().info("Catenary 插件已啟用！");
     }
 
     @Override
     public void onDisable() {
         // Plugin shutdown logic
-        // 清理所有顯示實體
-        if (displayEntityManager != null) {
-            displayEntityManager.cleanupAllEntities();
+        
+        // 儲存所有結構
+        if (structureManager != null) {
+            structureManager.saveStructures();
         }
         
-        getLogger().info("Catenary 插件已停用");
+        // 儲存所有預設
+        if (presetManager != null) {
+            presetManager.savePresets();
+        }
+        
+        // 移除所有顯示實體
+        if (displayEntityManager != null) {
+            displayEntityManager.removeAllEntities();
+        }
+        
+        getLogger().info("Catenary 插件已停用！");
     }
     
     /**
@@ -93,7 +104,7 @@ public final class Catenary extends JavaPlugin {
     public CommandManager getCommandManager() {
         return commandManager;
     }
-
+    
     public StructureManager getStructureManager() {
         return structureManager;
     }

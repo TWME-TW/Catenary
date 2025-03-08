@@ -8,8 +8,8 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.bukkit.entity.BlockDisplay;
 import org.bukkit.entity.Display;
+import org.bukkit.entity.EntityType;
 import org.bukkit.entity.ItemDisplay;
-import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.util.Transformation;
@@ -51,79 +51,85 @@ public class DisplayEntityManager {
         World world = structure.getWorld();
         double spacing = structure.getSpacing();
         
-        // 計算點的總數和間距
-        double totalLength = 0;
-        for (int i = 0; i < points.size() - 1; i++) {
-            totalLength += points.get(i).distance(points.get(i + 1));
+        // 計算每個點位之間的距離
+        double totalDistance = 0;
+        for (int i = 1; i < points.size(); i++) {
+            totalDistance += points.get(i).distance(points.get(i - 1));
         }
         
-        // 生成顯示實體
-        double currentDistance = 0;
-        for (int i = 0; i < points.size() - 1; i++) {
-            Vector3D startPoint = points.get(i);
-            Vector3D endPoint = points.get(i + 1);
-            double segmentLength = startPoint.distance(endPoint);
+        // 計算需要渲染的實體數量
+        int totalDisplays = Math.max(1, (int)(totalDistance / spacing));
+        
+        // 計算等距離的渲染點
+        double remainingDistance = 0;
+        Vector3D prevPoint = points.get(0);
+        
+        for (int i = 1; i < points.size(); i++) {
+            Vector3D currentPoint = points.get(i);
+            double segmentDistance = prevPoint.distance(currentPoint);
             
-            while (currentDistance < totalLength) {
-                // 計算當前點在當前線段上的位置
-                double t = (currentDistance - (totalLength - segmentLength)) / segmentLength;
-                if (t < 0 || t > 1) {
-                    break;
+            // 計算方向向量
+            Vector3D direction = currentPoint.subtract(prevPoint).normalize();
+            
+            // 渲染這個線段上的實體
+            double distanceAlongSegment = remainingDistance;
+            while (distanceAlongSegment < segmentDistance) {
+                // 計算位置
+                Vector3D position = prevPoint.add(direction.multiply(distanceAlongSegment));
+                
+                // 建立顯示實體
+                Display displayEntity = createDisplayEntity(world, position, renderItem, structure.getId());
+                if (displayEntity != null) {
+                    entities.add(displayEntity);
                 }
                 
-                // 計算實際位置
-                Vector3D position = startPoint.add(endPoint.subtract(startPoint).multiply(t));
-                
-                // 創建顯示實體
-                Display entity = createDisplayEntity(world, position, renderItem, structure.getId());
-                if (entity != null) {
-                    entities.add(entity);
-                }
-                
-                currentDistance += spacing;
+                distanceAlongSegment += spacing;
             }
+            
+            remainingDistance = distanceAlongSegment - segmentDistance;
+            prevPoint = currentPoint;
         }
         
-        // 存儲結構的實體列表
+        // 儲存這個結構的所有實體
         structureEntities.put(structure.getId(), entities);
     }
     
     /**
-     * 創建顯示實體
+     * 建立顯示實體
      */
     private Display createDisplayEntity(World world, Vector3D position, RenderItem renderItem, UUID structureId) {
-        Location location = new Location(world, position.getX(), position.getY(), position.getZ());
+        Display display;
+        Location location = position.toLocation(world);
         
-        Display entity;
         if (renderItem.isBlock()) {
-            // 創建方塊顯示實體
-            BlockDisplay blockDisplay = world.spawn(location, BlockDisplay.class);
+            // 建立方塊顯示
+            BlockDisplay blockDisplay = (BlockDisplay) world.spawnEntity(location, EntityType.BLOCK_DISPLAY);
             blockDisplay.setBlock(renderItem.getItem().getType().createBlockData());
-            entity = blockDisplay;
+            display = blockDisplay;
         } else {
-            // 創建物品顯示實體
-            ItemDisplay itemDisplay = world.spawn(location, ItemDisplay.class);
+            // 建立物品顯示
+            ItemDisplay itemDisplay = (ItemDisplay) world.spawnEntity(location, EntityType.ITEM_DISPLAY);
             itemDisplay.setItemStack(renderItem.getItem());
-            entity = itemDisplay;
+            display = itemDisplay;
         }
         
-        // 設定變換屬性
-        Transformation transformation = renderItem.getTransformation();
-        entity.setTransformation(transformation);
+        // 設定轉換資訊
+        display.setTransformation(renderItem.getTransformation());
         
-        // 設定基本顯示屬性
-        entity.setBrightness(new Display.Brightness(15, 15));
-        entity.setShadowRadius(0);
-        entity.setShadowStrength(0);
+        // 設定顯示設定
+        display.setBrightness(new Display.Brightness(15, 15)); // 最大亮度
+        display.setShadowRadius(0); // 沒有陰影
+        display.setShadowStrength(0);
+        display.setViewRange(64f); // 可見範圍
         
-        // 在持久化資料中存儲結構 ID
-        entity.getPersistentDataContainer().set(
+        // 儲存結構ID
+        display.getPersistentDataContainer().set(
             plugin.getNamespacedKey(STRUCTURE_ID_KEY),
             PersistentDataType.STRING,
             structureId.toString()
         );
         
-        return entity;
+        return display;
     }
     
     /**
@@ -132,61 +138,37 @@ public class DisplayEntityManager {
     public void removeStructureEntities(UUID structureId) {
         List<Display> entities = structureEntities.remove(structureId);
         if (entities != null) {
-            entities.forEach(Display::remove);
+            for (Display entity : entities) {
+                entity.remove();
+            }
         }
     }
     
     /**
-     * 清理所有顯示實體
+     * 移除所有顯示實體
      */
-    public void cleanupAllEntities() {
-        for (List<Display> entities : structureEntities.values()) {
-            entities.forEach(Display::remove);
-        }
-        structureEntities.clear();
-    }
-    
-    /**
-     * 尋找特定區域內的懸掛結構實體
-     */
-    public List<Display> findStructureEntitiesInArea(Location center, double radius) {
-        List<Display> result = new ArrayList<>();
-        World world = center.getWorld();
-        
-        if (world == null) {
-            return result;
-        }
-        
-        // 獲取區域內的所有顯示實體
-        world.getEntitiesByClass(Display.class).stream()
-            .filter(entity -> entity.getPersistentDataContainer().has(plugin.getNamespacedKey(STRUCTURE_ID_KEY), PersistentDataType.STRING))
-            .filter(entity -> entity.getLocation().distance(center) <= radius)
-            .forEach(result::add);
-        
-        return result;
-    }
-    
-    /**
-     * 更新可見結構的顯示狀態
-     */
-    public void updateVisibleStructures(List<Player> players) {
-        double maxRenderDistance = plugin.getConfigManager().getMaxRenderDistance();
-        
-        // 為每個玩家檢查並更新附近的結構
-        for (Player player : players) {
-            // TODO: 實現距離優化的渲染邏輯
+    public void removeAllEntities() {
+        for (UUID structureId : new ArrayList<>(structureEntities.keySet())) {
+            removeStructureEntities(structureId);
         }
     }
     
     /**
-     * 檢查實體是否屬於指定結構
+     * 尋找特定點位附近的結構
      */
-    public boolean isEntityOfStructure(Display entity, UUID structureId) {
-        String entityStructureId = entity.getPersistentDataContainer().get(
-            plugin.getNamespacedKey(STRUCTURE_ID_KEY),
-            PersistentDataType.STRING
-        );
+    public Set<UUID> findStructuresNearLocation(Location location, double radius) {
+        Set<UUID> nearbyStructures = new HashSet<>();
+        World world = location.getWorld();
         
-        return entityStructureId != null && entityStructureId.equals(structureId.toString());
+        for (Map.Entry<UUID, List<Display>> entry : structureEntities.entrySet()) {
+            for (Display entity : entry.getValue()) {
+                if (entity.getWorld().equals(world) && entity.getLocation().distance(location) <= radius) {
+                    nearbyStructures.add(entry.getKey());
+                    break;
+                }
+            }
+        }
+        
+        return nearbyStructures;
     }
 }

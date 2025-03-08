@@ -78,6 +78,15 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             case "help":
                 sendHelp(player);
                 break;
+            case "cancel":
+                handleCancelCommand(player);
+                break;
+            case "confirm":
+                handleConfirmCommand(player);
+                break;
+            case "adjust":
+                handleAdjustCommand(player, args);
+                break;
             default:
                 player.sendMessage("§c未知的指令！請使用 /catenary help 獲取幫助。");
                 break;
@@ -103,8 +112,15 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         String presetId = args[1].toLowerCase();
         
         // 檢查預設是否存在
-        if (plugin.getPresetManager().getPreset(presetId) == null) {
+        var preset = plugin.getPresetManager().getPreset(presetId);
+        if (preset == null) {
             player.sendMessage("§c找不到名為 '" + presetId + "' 的預設。");
+            return;
+        }
+        
+        // 檢查是否需要特殊權限
+        if (preset.isRequirePermission() && !player.hasPermission("catenary.preset." + presetId)) {
+            player.sendMessage("§c你沒有使用此預設的權限。");
             return;
         }
         
@@ -114,8 +130,12 @@ public class CommandManager implements CommandExecutor, TabCompleter {
             return;
         }
         
+        // 建立新的編輯會話
+        plugin.getStudioManager().startCreateSession(player, preset);
+        
+        player.sendMessage("§a已選擇預設: " + preset.getName());
         player.sendMessage("§a請使用工具右鍵點擊以設定第一個點。");
-        // 啟動建立模式會在玩家互動事件中處理
+        player.sendMessage("§a輸入 /catenary cancel 隨時取消。");
     }
     
     /**
@@ -295,11 +315,94 @@ public class CommandManager implements CommandExecutor, TabCompleter {
     }
     
     /**
+     * 處理 cancel 指令
+     */
+    private void handleCancelCommand(Player player) {
+        if (!plugin.getStudioManager().hasActiveSession(player)) {
+            player.sendMessage("§c你沒有進行中的懸掛結構編輯。");
+            return;
+        }
+        
+        plugin.getStudioManager().cancelSession(player);
+        player.sendMessage("§a已取消當前的懸掛結構編輯。");
+    }
+    
+    /**
+     * 處理確認指令
+     */
+    private void handleConfirmCommand(Player player) {
+        if (!plugin.getStudioManager().hasActiveSession(player)) {
+            player.sendMessage("§c你沒有進行中的懸掛結構編輯。");
+            return;
+        }
+        
+        plugin.getStudioManager().confirmStructure(player);
+    }
+
+    /**
+     * 處理調整指令
+     */
+    private void handleAdjustCommand(Player player, String[] args) {
+        if (!plugin.getStudioManager().hasActiveSession(player)) {
+            player.sendMessage("§c你沒有進行中的懸掛結構編輯。");
+            return;
+        }
+        
+        if (args.length < 3) {
+            player.sendMessage("§c用法: /catenary adjust <參數> <值>");
+            player.sendMessage("§c可用參數: slack, segments, spacing");
+            return;
+        }
+        
+        String parameter = args[1].toLowerCase();
+        String valueStr = args[2];
+        
+        try {
+            switch (parameter) {
+                case "slack":
+                    double slack = Double.parseDouble(valueStr);
+                    if (slack < 0 || slack > 1) {
+                        player.sendMessage("§c鬆緊度必須在 0-1 之間。");
+                        return;
+                    }
+                    plugin.getStudioManager().adjustSlack(player, slack);
+                    break;
+                    
+                case "segments":
+                    int segments = Integer.parseInt(valueStr);
+                    if (segments < 2 || segments > 100) {
+                        player.sendMessage("§c分段數必須在 2-100 之間。");
+                        return;
+                    }
+                    plugin.getStudioManager().adjustSegments(player, segments);
+                    break;
+                    
+                case "spacing":
+                    double spacing = Double.parseDouble(valueStr);
+                    if (spacing < 0.1 || spacing > 10) {
+                        player.sendMessage("§c間距必須在 0.1-10 之間。");
+                        return;
+                    }
+                    plugin.getStudioManager().adjustSpacing(player, spacing);
+                    break;
+                    
+                default:
+                    player.sendMessage("§c未知參數，可用參數: slack, segments, spacing");
+            }
+        } catch (NumberFormatException e) {
+            player.sendMessage("§c無效的數值: " + valueStr);
+        }
+    }
+
+    /**
      * 發送幫助訊息
      */
     private void sendHelp(Player player) {
         player.sendMessage("§6===== Catenary 懸掛結構插件 =====");
         player.sendMessage("§f/catenary create <預設> §7- 開始建立新的懸掛結構");
+        player.sendMessage("§f/catenary confirm §7- 確認建立懸掛結構");
+        player.sendMessage("§f/catenary cancel §7- 取消建立過程");
+        player.sendMessage("§f/catenary adjust <參數> <值> §7- 調整懸掛參數");
         player.sendMessage("§f/catenary edit <ID> §7- 編輯現有結構");
         player.sendMessage("§f/catenary remove <ID> §7- 移除結構");
         player.sendMessage("§f/catenary list §7- 列出你的懸掛結構");
@@ -318,7 +421,9 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         
         if (args.length == 1) {
             // 第一層子指令補全
-            List<String> subCommands = new ArrayList<>(Arrays.asList("create", "edit", "remove", "list", "presets", "help"));
+            List<String> subCommands = new ArrayList<>(Arrays.asList(
+                "create", "edit", "remove", "list", "presets", "help", "cancel", "confirm", "adjust"
+            ));
             
             if (sender.hasPermission("catenary.admin")) {
                 subCommands.add("admin");
@@ -336,6 +441,9 @@ public class CommandManager implements CommandExecutor, TabCompleter {
                             .collect(Collectors.toList()),
                         args[1]
                     );
+                    
+                case "adjust":
+                    return filterCompletions(Arrays.asList("slack", "segments", "spacing"), args[1]);
                     
                 case "admin":
                     if (sender.hasPermission("catenary.admin")) {
