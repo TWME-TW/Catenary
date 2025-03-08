@@ -216,7 +216,7 @@ public class DisplayEntityManager {
     private Quaternionf calculateRotation(Vector3D direction) {
         // 如果方向是垂直向上或向下的，特殊處理
         if (Math.abs(direction.getY()) > 0.99) {
-            return new Quaternionf().rotationY(0f).rotateX(
+            return new Quaternionf().rotationY((float)(Math.PI / 2)).rotateX(
                 (float)(direction.getY() > 0 ? Math.PI / 2 : -Math.PI / 2)
             );
         }
@@ -227,11 +227,12 @@ public class DisplayEntityManager {
         // 計算垂直方向的仰角
         double pitch = -Math.asin(direction.getY());
         
-        // 先繞Y軸旋轉（偏航），再繞X軸旋轉（俯仰），最後需要額外旋轉90度使方塊沿鏈條方向對齊
+        // 修改: 先繞Y軸旋轉90度（平面旋轉），再進行原本的旋轉
         return new Quaternionf()
+            .rotateY((float)(Math.PI / 2)) // 新增: 額外的90度Y軸平面旋轉
             .rotateY((float)yaw)
             .rotateX((float)pitch)
-            .rotateZ((float)(Math.PI / 2)); // 旋轉90度使方塊與鏈條方向對齊
+            .rotateZ((float)(Math.PI / 2)); // 原有的Z軸旋轉90度
     }
     
     /**
