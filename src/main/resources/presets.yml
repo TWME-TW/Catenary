@@ -1,0 +1,155 @@
+# Catenary 預設配置
+
+presets:
+  # 基本鏈條
+  chain:
+    name: "鏈條"
+    description: "標準的鐵鏈懸掛結構"
+    material: CHAIN
+    isBlock: false
+    scale: 1.0
+    rotation:
+      x: 0
+      y: 0
+      z: 0
+    slack: 0.3
+    segments: 15
+    spacing: 0.5
+    icon: CHAIN
+    requirePermission: false
+  
+  # 金鎖鏈
+  golden_chain:
+    name: "黃金鏈條"
+    description: "奢華的黃金懸掛鏈條"
+    material: GOLD_INGOT
+    isBlock: false
+    scale: 1.0
+    rotation:
+      x: 0
+      y: 0
+      z: 90
+    slack: 0.3
+    segments: 15
+    spacing: 0.5
+    icon: GOLD_INGOT
+    requirePermission: false
+  
+  # 繩索
+  rope:
+    name: "繩索"
+    description: "簡單的繩索懸掛結構"
+    material: STRING
+    isBlock: false
+    scale: 1.0
+    rotation:
+      x: 0
+      y: 0
+      z: 0
+    slack: 0.4
+    segments: 12
+    spacing: 0.3
+    icon: STRING
+    requirePermission: false
+  
+  # 電纜線
+  cable:
+    name: "電纜線"
+    description: "用於模擬電力線路的懸掛結構"
+    material: REDSTONE
+    isBlock: false
+    scale: 0.8
+    rotation:
+      x: 0
+      y: 0
+      z: 0
+    slack: 0.25
+    segments: 20
+    spacing: 0.4
+    icon: REDSTONE
+    requirePermission: false
+  
+  # 燈籠鏈
+  lantern_chain:
+    name: "燈籠鏈"
+    description: "適合掛燈籠的精美鏈條"
+    material: IRON_INGOT
+    isBlock: false
+    scale: 0.7
+    rotation:
+      x: 0
+      y: 0
+      z: 90
+    slack: 0.2
+    segments: 10
+    spacing: 0.6
+    icon: LANTERN
+    requirePermission: false
+  
+  # 花環
+  garland:
+    name: "花環"
+    description: "裝飾性花環懸掛結構"
+    material: FLOWERING_AZALEA_LEAVES
+    isBlock: true
+    scale: 0.4
+    rotation:
+      x: 0
+      y: 0
+      z: 0
+    slack: 0.35
+    segments: 15
+    spacing: 0.4
+    icon: FLOWERING_AZALEA_LEAVES
+    requirePermission: false
+  
+  # 石柱
+  stone_column:
+    name: "石柱"
+    description: "堅固的石柱懸掛結構"
+    material: STONE
+    isBlock: true
+    scale: 0.5
+    rotation:
+      x: 0
+      y: 0
+      z: 0
+    slack: 0.05
+    segments: 30
+    spacing: 0.5
+    icon: STONE
+    requirePermission: false
+    
+  # 木橋
+  wooden_bridge:
+    name: "木橋"
+    description: "簡易懸掛木橋"
+    material: OAK_PLANKS
+    isBlock: true
+    scale: 0.7
+    rotation:
+      x: 0
+      y: 0
+      z: 0
+    slack: 0.1
+    segments: 25
+    spacing: 0.7
+    icon: OAK_PLANKS
+    requirePermission: false
+    
+  # 玻璃管
+  glass_tube:
+    name: "玻璃管"
+    description: "透明的玻璃管懸掛結構"
+    material: GLASS
+    isBlock: true
+    scale: 0.4
+    rotation:
+      x: 0
+      y: 0
+      z: 0
+    slack: 0.15
+    segments: 20
+    spacing: 0.4
+    icon: GLASS
+    requirePermission: false

@@ -1,0 +1,55 @@
+name: Catenary
+version: '${project.version}'
+main: dev.twme.catenary.Catenary
+api-version: '1.19'
+authors: [twme]
+description: 用於建立懸掛結構的 Paper 插件
+website: https://github.com/twme/Catenary
+
+commands:
+  catenary:
+    description: 懸掛結構插件的主要指令
+    usage: /catenary <子指令> [參數...]
+    aliases: [cat, ctn]
+    permission: catenary.use
+    
+permissions:
+  catenary.*:
+    description: 所有懸掛結構插件的權限
+    default: op
+    children:
+      catenary.use: true
+      catenary.create: true
+      catenary.edit: true
+      catenary.remove: true
+      catenary.list: true
+      catenary.presets: true
+      catenary.admin: true
+      
+  catenary.use:
+    description: 允許使用基本功能
+    default: true
+    
+  catenary.create:
+    description: 允許建立懸掛結構
+    default: true
+    
+  catenary.edit:
+    description: 允許編輯懸掛結構
+    default: true
+    
+  catenary.remove:
+    description: 允許移除懸掛結構
+    default: true
+    
+  catenary.list:
+    description: 允許列出懸掛結構
+    default: true
+    
+  catenary.presets:
+    description: 允許查看預設列表
+    default: true
+    
+  catenary.admin:
+    description: 允許使用管理員指令
+    default: op
