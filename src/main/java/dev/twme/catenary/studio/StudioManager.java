@@ -12,6 +12,7 @@ import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.Color;
 
 import java.util.*;
 
@@ -147,12 +148,13 @@ public class StudioManager {
                         1, 0, 0, 0, 0
                     );
                     
-                    // 顯示方向粒子
+                    // 顯示方向粒子 - 修復此處的錯誤
+                    Particle.DustOptions dustOptions = new Particle.DustOptions(Color.RED, 1.0f); // 建立紅色粒子設定
                     player.spawnParticle(
                         Particle.DUST,
                         current.getX(), current.getY(), current.getZ(),
-                        0, (float)direction.getX(), (float)direction.getY(), (float)direction.getZ(),
-                        0.1f
+                        1, 0, 0, 0,
+                        dustOptions // 提供必要的 DustOptions 物件
                     );
                 }
                 
