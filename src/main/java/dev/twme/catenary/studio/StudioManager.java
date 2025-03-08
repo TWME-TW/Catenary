@@ -131,11 +131,39 @@ public class StudioManager {
                     return;
                 }
                 
-                // 顯示粒子效果
-                for (Vector3D point : activeSessions.get(player.getUniqueId()).previewPoints) {
-                    player.spawnParticle(Particle.END_ROD, 
-                                         point.getX(), point.getY(), point.getZ(), 
-                                         1, 0, 0, 0, 0);
+                // 計算預覽方向 - 為了更好的視覺效果，使用較長的粒子線條
+                List<Vector3D> currentPoints = activeSessions.get(player.getUniqueId()).previewPoints;
+                
+                // 顯示每個點位的粒子和方向
+                for (int i = 0; i < currentPoints.size() - 1; i++) {
+                    Vector3D current = currentPoints.get(i);
+                    Vector3D next = currentPoints.get(i + 1);
+                    Vector3D direction = next.subtract(current).normalize().multiply(0.1); // 短向量表示方向
+                    
+                    // 顯示點位粒子
+                    player.spawnParticle(
+                        Particle.END_ROD,
+                        current.getX(), current.getY(), current.getZ(),
+                        1, 0, 0, 0, 0
+                    );
+                    
+                    // 顯示方向粒子
+                    player.spawnParticle(
+                        Particle.DUST,
+                        current.getX(), current.getY(), current.getZ(),
+                        0, (float)direction.getX(), (float)direction.getY(), (float)direction.getZ(),
+                        0.1f
+                    );
+                }
+                
+                // 顯示最後一個點
+                if (!currentPoints.isEmpty()) {
+                    Vector3D last = currentPoints.get(currentPoints.size() - 1);
+                    player.spawnParticle(
+                        Particle.END_ROD,
+                        last.getX(), last.getY(), last.getZ(),
+                        1, 0, 0, 0, 0
+                    );
                 }
                 
                 counter++;

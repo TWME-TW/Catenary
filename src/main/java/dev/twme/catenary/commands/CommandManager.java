@@ -407,6 +407,7 @@ public class CommandManager implements CommandExecutor, TabCompleter {
         player.sendMessage("§f/catenary remove <ID> §7- 移除結構");
         player.sendMessage("§f/catenary list §7- 列出你的懸掛結構");
         player.sendMessage("§f/catenary presets §7- 顯示可用的預設清單");
+        player.sendMessage("§a註： 實體會自動順著曲線方向旋轉，並根據曲率自動調整密度分佈");
         
         if (player.hasPermission("catenary.admin")) {
             player.sendMessage("§f/catenary admin reload §7- 重新載入配置");
